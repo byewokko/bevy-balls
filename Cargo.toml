@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 bevy = "0.14"
 rand = "*"
+rand_distr = "*"
+bevy_prototype_lyon = "0.12.0"
+bevy_svg = "0.14.0"

@@ -1,7 +1,12 @@
+mod svg_test;
+
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use rand::prelude::*;
+use rand_distr::{Normal, Distribution};
 use std::f32::consts::TAU;
+use bevy_svg::prelude::*;
+use svg_test::_player_svg_sprite;
 
 
 pub const PLAYER_SPEED: f32 = 500.0;
@@ -15,9 +20,11 @@ pub const BOUNCE_RANDOMNESS: f32 = 0.05;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(SvgPlugin)
         .add_systems(Startup, spawn_player)
         .add_systems(Startup, spawn_enemies)
         .add_systems(Startup, spawn_camera)
+        .add_systems(Update, animate_player)
         .add_systems(Update, move_player)
         .add_systems(Update, move_enemy)
         .add_systems(Update, confine_player)
@@ -47,18 +54,24 @@ pub fn spawn_player(
 ) {
     let window = window_query.get_single().unwrap();
 
-    commands.spawn((
-        SpriteBundle {
-            transform: Transform::from_xyz(
-                window.width() / 2.0, 
-                window.height() / 2.0, 
-                0.0
-            ),
-            texture: asset_server.load("sprites/ball_blue_large.png"),
-            ..default()
-        },
-        Player {},
-    ));
+    commands
+        .spawn((
+            // Transform::from_translation(Vec3::new(window.width() / 2.0, window.height() / 2.0, 0.0)),
+            // GlobalTransform::default(),
+            // InheritedVisibility::default(),
+            Player {},
+            SpriteBundle {
+                texture: asset_server.load("sprites/ball_blue_small.png"),
+                transform: Transform::from_translation(Vec3::new(window.width() / 2.0, window.height() / 2.0, 0.0)),
+                ..default()
+            },
+        ))
+        .with_children(|parent| {
+            // Spawn the SVG as a child of the parent
+            parent.spawn((
+                _player_svg_sprite(asset_server),
+            ));
+        });
 }
 
 pub fn spawn_enemies(
@@ -122,6 +135,16 @@ pub fn move_player(
         direction = direction.normalize_or_zero();
 
         transform.translation += direction * PLAYER_SPEED * time.delta_seconds();
+    }
+
+}
+
+pub fn animate_player(
+    mut player_query: Query<&mut Transform, With<Player>>,
+    time: Res<Time>,
+) {
+    if let Ok(mut transform) = player_query.get_single_mut() {
+        transform.rotate_z(-3.0 * time.delta_seconds());
     }
 
 }
@@ -197,13 +220,34 @@ pub fn confine_enemy(
 
         if bounced {
             enemy.direction = (new_direction + BOUNCE_RANDOMNESS * random_direction()).normalize();
-            commands.spawn(AudioBundle {
-                source: asset_server.load("audio/bump.ogg"),
-                settings: PlaybackSettings::ONCE,
-            });
+            play_random_bonk(&mut commands, &asset_server);
         }
         
     }
     
 
+}
+
+fn play_random_bonk(commands: &mut Commands, asset_server: &Res<AssetServer>) {
+    // Define a list of sound file paths
+    let sound_files = vec![
+        "audio/bump.ogg",
+        "audio/bonk.ogg",
+    ];
+
+    // Select a random sound file
+    let mut rng = thread_rng();
+    let random_index = rng.gen_range(0..sound_files.len());
+    let selected_file = sound_files[random_index];
+
+    // Slightly randomize playback speed
+    let normal = Normal::new(1.0, 0.1).unwrap();
+    let playback_speed: f32 = normal.sample(&mut rng);
+
+    // Load the selected file and play it
+    commands.spawn(AudioBundle {
+        source: asset_server.load(selected_file),
+        settings: PlaybackSettings::DESPAWN.with_speed(playback_speed),
+        ..default()
+    });
 }
